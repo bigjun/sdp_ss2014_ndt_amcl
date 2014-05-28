@@ -84,7 +84,7 @@ void sendMapToRviz(lslgeneric::NDTMap<pcl::PointXYZ> &map){
     Eigen::Quaternion<double> q(evecs);
 	
 		visualization_msgs::Marker marker;
-		marker.header.frame_id = "world";
+		marker.header.frame_id = "odom";
 		marker.header.stamp = ros::Time();
 		marker.ns = "NDT";
 		marker.id = i;
@@ -227,7 +227,7 @@ bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
 	static int seq = 0;
 	O.header.stamp = ts;
 	O.header.seq = seq;
-	O.header.frame_id = "/world";
+	O.header.frame_id = "/odom";
 	O.child_frame_id = "/mcl_pose";
 	
 	O.pose.pose.position.x = mean[0];
@@ -298,7 +298,7 @@ bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
   transform.setOrigin( tf::Vector3(mean[0],mean[1], 0.0) );
   
 	transform.setRotation( q );
-  br.sendTransform(tf::StampedTransform(transform, ts, "world", "mcl_pose"));
+  br.sendTransform(tf::StampedTransform(transform, ts, "odom", "mcl_pose"));
 	
 	return true;
 }
@@ -311,9 +311,9 @@ bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 mrpt::utils::CTicTac	TT;
 
-std::string tf_odo_topic =   "odom_base_link";
+std::string tf_odo_topic =   "odom";
 std::string tf_state_topic = "base_link";
-std::string tf_laser_link =  "base_laser_link";
+std::string tf_laser_link =  "base_laser_front_link";
 
 /**
  * Callback for laser scan messages 
@@ -333,10 +333,10 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 	
 	///Get state information
 	tf::StampedTransform transform;
-	tf_listener.waitForTransform("world", tf_state_topic, scan->header.stamp,ros::Duration(1.0));
+	tf_listener.waitForTransform("odom", tf_state_topic, scan->header.stamp,ros::Duration(1.0));
 	///Ground truth --- Not generally available so should be changed to the manual initialization
 	try{
-		tf_listener.lookupTransform("world", tf_state_topic, scan->header.stamp, transform);
+		tf_listener.lookupTransform("odom", tf_state_topic, scan->header.stamp, transform);
 		gyaw = tf::getYaw(transform.getRotation());  
 	  gx = transform.getOrigin().x();
 	  gy = transform.getOrigin().y();
@@ -348,7 +348,7 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 	
 	///Odometry 
 	try{
-		tf_listener.lookupTransform("world", tf_odo_topic, scan->header.stamp, transform);
+		tf_listener.lookupTransform("odom", tf_odo_topic, scan->header.stamp, transform);
 		yaw = tf::getYaw(transform.getRotation());  
 	  x = transform.getOrigin().x();
 	  y = transform.getOrigin().y();
