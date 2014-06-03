@@ -227,9 +227,9 @@ bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
 	static int seq = 0;
 	O.header.stamp = ts;
 	O.header.seq = seq;
-	O.header.frame_id = "/odom";
+	O.header.frame_id = "/map";
 	O.child_frame_id = "/mcl_pose";
-	
+
 	O.pose.pose.position.x = mean[0];
 	O.pose.pose.position.y = mean[1];
 	tf::Quaternion q;
@@ -298,7 +298,12 @@ bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
   transform.setOrigin( tf::Vector3(mean[0],mean[1], 0.0) );
   
 	transform.setRotation( q );
-  br.sendTransform(tf::StampedTransform(transform, ts, "odom", "mcl_pose"));
+        br.sendTransform(tf::StampedTransform(transform, ts, "map", "mcl_pose"));
+
+        transform.setOrigin( tf::Vector3(0.0,0.0,0.0) );
+	q.setRPY(0,0,0);
+	transform.setRotation( q );
+        br.sendTransform(tf::StampedTransform(transform, ts, "map", "odom"));
 	
 	return true;
 }
@@ -333,29 +338,29 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 	
 	///Get state information
 	tf::StampedTransform transform;
-	tf_listener.waitForTransform("odom", tf_state_topic, scan->header.stamp,ros::Duration(1.0));
+	tf_listener.waitForTransform("mcl_pose", tf_state_topic, ros::Time(0),ros::Duration(1.0));
 	///Ground truth --- Not generally available so should be changed to the manual initialization
 	try{
-		tf_listener.lookupTransform("odom", tf_state_topic, scan->header.stamp, transform);
+		tf_listener.lookupTransform("mcl_pose", tf_state_topic, ros::Time(0), transform);
 		gyaw = tf::getYaw(transform.getRotation());  
 	  gx = transform.getOrigin().x();
 	  gy = transform.getOrigin().y();
 	}
 	catch (tf::TransformException ex){
 		ROS_ERROR("%s",ex.what());
-		return;
+		//return;
 	}
 	
 	///Odometry 
 	try{
-		tf_listener.lookupTransform("odom", tf_odo_topic, scan->header.stamp, transform);
+		tf_listener.lookupTransform("mcl_pose", tf_odo_topic, ros::Time(0), transform);
 		yaw = tf::getYaw(transform.getRotation());  
 	  x = transform.getOrigin().x();
 	  y = transform.getOrigin().y();
 	}
 	catch (tf::TransformException ex){
 		ROS_ERROR("%s",ex.what());
-		return;
+		//return;
 	}
 	
 		
@@ -576,8 +581,7 @@ int main(int argc, char **argv){
 	offa = sensor_pose_th;
 	offx = sensor_pose_x;
 	offy = sensor_pose_y;
-	
-	
+
 	has_sensor_offset_set = true;
 	
 	fprintf(stderr,"Sensor Pose = (%lf %lf %lf)\n",offx, offy, offa);	
