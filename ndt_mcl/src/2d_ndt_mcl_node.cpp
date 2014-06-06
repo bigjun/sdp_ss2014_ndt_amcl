@@ -216,89 +216,131 @@ static bool has_sensor_offset_set = false;
 static bool isFirstLoad=true;
 Eigen::Affine3d Told,Todo;
 
+mrpt::utils::CTicTac	TT;
+std::string tf_odo_topic =   "odom";
+std::string tf_state_topic = "base_link";
+std::string tf_laser_link =  "base_laser_front_link";
+std::string tf_world =  "map";
+
+ros::Duration tf_timestamp_tolerance;
+double tf_tolerance;
+
 ros::Publisher mcl_pub; ///< The output of MCL is published with this!
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
-	nav_msgs::Odometry O;
-	static int seq = 0;
-	O.header.stamp = ts;
-	O.header.seq = seq;
-	O.header.frame_id = "/odom";
-	O.child_frame_id = "/mcl_pose";
-	
-	O.pose.pose.position.x = mean[0];
-	O.pose.pose.position.y = mean[1];
-	tf::Quaternion q;
-	q.setRPY(0,0,mean[2]);
-	O.pose.pose.orientation.x = q.getX();
-	O.pose.pose.orientation.y = q.getY();
-	O.pose.pose.orientation.z = q.getZ();
-	O.pose.pose.orientation.w = q.getW();
+bool sendROSOdoMessage(bool is_first_call, Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
+        static tf::TransformBroadcaster br;
+
+        if(!is_first_call)
+        {
+                //*************************************
+                // Code copied from the amcl node;
+                // subtracts base->odom from map->base
+                //*************************************
+                tf::Stamped<tf::Pose> odom_to_map;
+                static tf::TransformListener tf_listener;
+                try
+                {
+                        tf::Transform tmp_tf(tf::createQuaternionFromYaw(mean[2]),tf::Vector3(mean[0],mean[1],0.0));
+                        tf::Stamped<tf::Pose> tmp_tf_stamped (tmp_tf.inverse(), ts-tf_timestamp_tolerance, tf_state_topic);
+                        tf_listener.transformPose(tf_odo_topic, tmp_tf_stamped, odom_to_map);
+                }
+                catch(tf::TransformException ex)
+                {
+                        ROS_ERROR("Failed to subtract base to odom transform: %s", ex.what());
+                        return false;
+                }
+
+                tf::Transform latest_tf_ = tf::Transform(tf::Quaternion(odom_to_map.getRotation()), tf::Point(odom_to_map.getOrigin()));
+                tf::StampedTransform tmp_tf_stamped(latest_tf_.inverse(), ts, tf_world, tf_odo_topic);
+
+
+                //*****************************************************
+                // Creates a pose message and publishes the transforms
+                //*****************************************************
+	        nav_msgs::Odometry O;
+	        static int seq = 0;
+	        O.header.stamp = ts;
+	        O.header.seq = seq;
+	        O.header.frame_id = tf_world;
+	        O.child_frame_id = tf_odo_topic;
+
+	        O.pose.pose.position.x = tmp_tf_stamped.getOrigin().x();
+	        O.pose.pose.position.y = tmp_tf_stamped.getOrigin().y();
+	        tf::Quaternion q;
+	        //q.setRPY(0,0,tmp_tf_stamped.getRotation().yaw());
+	        O.pose.pose.orientation.x = tmp_tf_stamped.getRotation().x();
+	        O.pose.pose.orientation.y = tmp_tf_stamped.getRotation().y();
+	        O.pose.pose.orientation.z = tmp_tf_stamped.getRotation().z();
+	        O.pose.pose.orientation.w = tmp_tf_stamped.getRotation().w();
 	
 
-	/**
-	O.pose.covariance = { cov(0,0), cov(0,1), 0 , 0 , 0 , 0,
+	        /**
+	        O.pose.covariance = { cov(0,0), cov(0,1), 0 , 0 , 0 , 0,
 											 cov(1,0), cov(1,1), 0 , 0 , 0 , 0,
 											 0       ,     0   , 0 , 0 , 0 , 0,
 											 0       ,     0   , 0 , 0 , 0 , 0,
 											 0       ,     0   , 0 , 0 , 0 , 0,
 											 0       ,     0   , 0 , 0 , 0 , cov(2,2)};*/
 	
-	O.pose.covariance[0] = cov(0,0);
-	O.pose.covariance[1] = cov(0,1);
-	O.pose.covariance[2] = 0;
-	O.pose.covariance[3] = 0;
-	O.pose.covariance[4] = 0;
-	O.pose.covariance[5] = 0;
+	        O.pose.covariance[0] = cov(0,0);
+	        O.pose.covariance[1] = cov(0,1);
+	        O.pose.covariance[2] = 0;
+	        O.pose.covariance[3] = 0;
+	        O.pose.covariance[4] = 0;
+	        O.pose.covariance[5] = 0;
 	
-	O.pose.covariance[6] = cov(1,0);
-	O.pose.covariance[7] = cov(1,1);
-	O.pose.covariance[8] = 0;
-	O.pose.covariance[9] = 0;
-	O.pose.covariance[10] = 0;
-	O.pose.covariance[11] = 0;
+	        O.pose.covariance[6] = cov(1,0);
+	        O.pose.covariance[7] = cov(1,1);
+	        O.pose.covariance[8] = 0;
+	        O.pose.covariance[9] = 0;
+	        O.pose.covariance[10] = 0;
+	        O.pose.covariance[11] = 0;
 	
-	O.pose.covariance[12] = 0;
-	O.pose.covariance[13] = 0;
-	O.pose.covariance[14] = 0;
-	O.pose.covariance[15] = 0;
-	O.pose.covariance[16] = 0;
-	O.pose.covariance[17] = 0;
+	        O.pose.covariance[12] = 0;
+	        O.pose.covariance[13] = 0;
+	        O.pose.covariance[14] = 0;
+	        O.pose.covariance[15] = 0;
+	        O.pose.covariance[16] = 0;
+	        O.pose.covariance[17] = 0;
 	
-	O.pose.covariance[18] = 0;
-	O.pose.covariance[19] = 0;
-	O.pose.covariance[20] = 0;
-	O.pose.covariance[21] = 0;
-	O.pose.covariance[22] = 0;
-	O.pose.covariance[23] = 0;
+	        O.pose.covariance[18] = 0;
+	        O.pose.covariance[19] = 0;
+	        O.pose.covariance[20] = 0;
+	        O.pose.covariance[21] = 0;
+	        O.pose.covariance[22] = 0;
+	        O.pose.covariance[23] = 0;
 	
-	O.pose.covariance[24] = 0;
-	O.pose.covariance[25] = 0;
-	O.pose.covariance[26] = 0;
-	O.pose.covariance[27] = 0;
-	O.pose.covariance[28] = 0;
-	O.pose.covariance[29] = 0;
+	        O.pose.covariance[24] = 0;
+	        O.pose.covariance[25] = 0;
+	        O.pose.covariance[26] = 0;
+	        O.pose.covariance[27] = 0;
+	        O.pose.covariance[28] = 0;
+	        O.pose.covariance[29] = 0;
 	
-	O.pose.covariance[30] = 0;
-	O.pose.covariance[31] = 0;
-	O.pose.covariance[32] = 0;
-	O.pose.covariance[33] = 0;
-	O.pose.covariance[34] = 0;
-	O.pose.covariance[35] = cov(2,2);
-	
-	seq++;
-	mcl_pub.publish(O);
-	
-	static tf::TransformBroadcaster br;
-  tf::Transform transform;
-  transform.setOrigin( tf::Vector3(mean[0],mean[1], 0.0) );
-  
-	transform.setRotation( q );
-  br.sendTransform(tf::StampedTransform(transform, ts, "odom", "mcl_pose"));
+	        O.pose.covariance[30] = 0;
+	        O.pose.covariance[31] = 0;
+	        O.pose.covariance[32] = 0;
+	        O.pose.covariance[33] = 0;
+	        O.pose.covariance[34] = 0;
+	        O.pose.covariance[35] = cov(2,2);
+
+	        seq++;
+	        mcl_pub.publish(O);
+                br.sendTransform(tmp_tf_stamped);
+        }
+        else
+        {
+                tf::Transform transform;
+                transform.setOrigin( tf::Vector3(0.0,0.0,0.0) );  
+                tf::Quaternion q;
+                q.setRPY(0,0,0);
+	        transform.setRotation( q );
+                br.sendTransform(tf::StampedTransform(transform, ts, tf_world, tf_odo_topic));
+        }
 	
 	return true;
 }
@@ -309,11 +351,7 @@ bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-mrpt::utils::CTicTac	TT;
 
-std::string tf_odo_topic =   "odom";
-std::string tf_state_topic = "base_link";
-std::string tf_laser_link =  "base_laser_front_link";
 
 /**
  * Callback for laser scan messages 
@@ -330,34 +368,41 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 	
 	if(has_sensor_offset_set == false) return;
 	double gx,gy,gyaw,x,y,yaw;
-	
+
 	///Get state information
 	tf::StampedTransform transform;
-	tf_listener.waitForTransform("odom", tf_state_topic, scan->header.stamp,ros::Duration(1.0));
+	tf_listener.waitForTransform(tf_world, tf_state_topic, scan->header.stamp,ros::Duration(1.0));
 	///Ground truth --- Not generally available so should be changed to the manual initialization
 	try{
-		tf_listener.lookupTransform("odom", tf_state_topic, scan->header.stamp, transform);
+		tf_listener.lookupTransform(tf_world, tf_state_topic, scan->header.stamp, transform);
 		gyaw = tf::getYaw(transform.getRotation());  
 	  gx = transform.getOrigin().x();
 	  gy = transform.getOrigin().y();
 	}
 	catch (tf::TransformException ex){
+		gyaw = 0.0;
+	        gx = 0.0;
+	        gy = 0.0;
 		ROS_ERROR("%s",ex.what());
-		return;
+		//return;
 	}
-	
+
 	///Odometry 
-	try{
-		tf_listener.lookupTransform("odom", tf_odo_topic, scan->header.stamp, transform);
-		yaw = tf::getYaw(transform.getRotation());  
-	  x = transform.getOrigin().x();
-	  y = transform.getOrigin().y();
+	try
+        {
+	        tf_listener.lookupTransform(tf_world, tf_state_topic, scan->header.stamp, transform);
+	        yaw = tf::getYaw(transform.getRotation());  
+	        x = transform.getOrigin().x();
+	        y = transform.getOrigin().y();
 	}
-	catch (tf::TransformException ex){
+	catch (tf::TransformException ex)
+        {
+		yaw = 0.0;
+	        x = 0.0;
+	        y = 0.0;
 		ROS_ERROR("%s",ex.what());
-		return;
+		//return;
 	}
-	
 		
 	mrpt::utils::CTicTac	tictac;
 	tictac.Tic();
@@ -376,7 +421,7 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 		gy = ipos_y;
 		gyaw = ipos_yaw;
 	}
-	
+
 	if(isFirstLoad || hasNewInitialPose){
 		fprintf(stderr,"Initializing to (%lf, %lf, %lf)\n",gx,gy,gyaw);
 		/// Initialize the particle filter
@@ -389,12 +434,14 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 	///Calculate the differential motion from the last frame
 	Eigen::Affine3d Tmotion = Told.inverse() * T;
 	Todo = Todo*Tmotion; ///< just integrates odometry for the visualization
-	
+	fprintf(stderr,"ROS SUCKS: %f, %f, %f\n", x, y, yaw);
+        fprintf(stderr,"ROS SUCKS 2: %f, %f, %f\n", T(0,0), T(1,1), T(2,2));
+        fprintf(stderr,"ROS SUCKS 3: %f, %f, %f\n", Told(0,0), Told(1,1), Told(2,2));
 	if(isFirstLoad==false){
 		if( (Tmotion.translation().norm()<0.005 && fabs(Tmotion.rotation().eulerAngles(0,1,2)[2])<(0.2*M_PI/180.0))){
 			Eigen::Vector3d dm = ndtmcl->getMean();
 			Eigen::Matrix3d cov = ndtmcl->pf.getDistributionVariances();
-			sendROSOdoMessage(dm,cov, scan->header.stamp);
+			sendROSOdoMessage(isFirstLoad,dm,cov, scan->header.stamp+tf_timestamp_tolerance);
 			double Time = tictac.Tac();
 			fprintf(stderr,"Time elapsed %.1lfms\n",Time*1000);
 			return;
@@ -430,17 +477,18 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// Now we have the sensor origin and pointcloud -- Lets do MCL
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	ndtmcl->updateAndPredict(Tmotion, *cloud); ///<predicts, updates and resamples if necessary (ndt_mcl.hpp)
+        if( (Tmotion.translation().norm()>0.01 || fabs(Tmotion.rotation().eulerAngles(0,1,2)[2])>(0.5*M_PI/180.0)))
+        	ndtmcl->updateAndPredict(Tmotion, *cloud); ///<predicts, updates and resamples if necessary (ndt_mcl.hpp)
 	
 	Eigen::Vector3d dm = ndtmcl->getMean(); ///Maximum aposteriori pose
 	Eigen::Matrix3d cov = ndtmcl->pf.getDistributionVariances(); ///Pose covariance
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	double Time = tictac.Tac();
 	fprintf(stderr,"Time elapsed %.1lfms (%lf %lf %lf) \n",Time*1000,dm[0],dm[1],dm[2]);
-	isFirstLoad = false;
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
-	sendROSOdoMessage(dm,cov, scan->header.stamp); ///Spit out the pose estimate
+	sendROSOdoMessage(isFirstLoad, dm,cov, scan->header.stamp+tf_timestamp_tolerance); ///Spit out the pose estimate
+        isFirstLoad = false;
 	
 	if(counter%50==0){
 		sendMapToRviz(ndtmcl->map);
@@ -451,7 +499,6 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 	Eigen::Vector3d origin(dm[0] + L * cos(dm[2]+alpha),dm[1] + L * sin(dm[2]+alpha),0.1);
 	Eigen::Affine3d ppos = getAsAffine(dm[0],dm[1],dm[2]);
 	
-	//lslgeneric::transformPointCloudInPlace(Tgt, *cloud);
 	lslgeneric::transformPointCloudInPlace(ppos, *cloud);
 	mrpt::opengl::COpenGLScenePtr &scene = win3D.get3DSceneAndLock();	
 	win3D.setCameraPointingToPoint(gx,gy,1);
@@ -512,7 +559,9 @@ int main(int argc, char **argv){
 	paramHandle.param<std::string>("input_laser_topic", input_laser_topic, std::string("/base_scan"));
 	paramHandle.param<std::string>("tf_base_link", tf_state_topic, std::string("/base_link"));
 	paramHandle.param<std::string>("tf_laser_link", tf_laser_link, std::string("/hokuyo1_link"));
-	
+	paramHandle.param<std::string>("tf_odom", tf_odo_topic, std::string("odom"));
+	paramHandle.param<std::string>("tf_world", tf_world, std::string("map"));
+
 	bool use_sensor_pose;
 	paramHandle.param<bool>("use_sensor_pose", use_sensor_pose, false);
 	double sensor_pose_x, sensor_pose_y, sensor_pose_th;
@@ -534,9 +583,11 @@ int main(int argc, char **argv){
 	paramHandle.param<double>("initial_pose_x", ipos_x, 0.);
 	paramHandle.param<double>("initial_pose_y", ipos_y, 0.);
 	paramHandle.param<double>("initial_pose_yaw", ipos_yaw, 0.);
-	
+        paramHandle.param<double>("tf_timestamp_tolerance", tf_tolerance, 1.0);
+
 	if(userInitialPose==true) hasNewInitialPose=true;
-	
+        tf_timestamp_tolerance.fromSec(tf_tolerance);
+
 	//////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////
 	/// Prepare the map
@@ -576,8 +627,7 @@ int main(int argc, char **argv){
 	offa = sensor_pose_th;
 	offx = sensor_pose_x;
 	offy = sensor_pose_y;
-	
-	
+
 	has_sensor_offset_set = true;
 	
 	fprintf(stderr,"Sensor Pose = (%lf %lf %lf)\n",offx, offy, offa);	
