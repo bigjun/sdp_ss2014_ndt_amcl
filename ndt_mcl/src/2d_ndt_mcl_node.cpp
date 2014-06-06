@@ -50,6 +50,30 @@
 #include <ndt_map/ndt_map.h>
 
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Globals
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+NDTMCL<pcl::PointXYZ> *ndtmcl;
+///Laser sensor offset
+float offx = 0;
+float offy = 0;
+float offa = 0;
+static bool has_sensor_offset_set = false;
+static bool isFirstLoad=true;
+Eigen::Affine3d Told,Todo;
+
+mrpt::utils::CTicTac	TT;
+std::string tf_odo_topic =   "odom";
+std::string tf_state_topic = "base_link";
+std::string tf_laser_link =  "base_laser_front_link";
+std::string tf_world =  "map";
+
+ros::Duration tf_timestamp_tolerance;
+double tf_tolerance;
+
+ros::Publisher mcl_pub; ///< The output of MCL is published with this!
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Visualization stuff
@@ -84,7 +108,7 @@ void sendMapToRviz(lslgeneric::NDTMap<pcl::PointXYZ> &map){
     Eigen::Quaternion<double> q(evecs);
 	
 		visualization_msgs::Marker marker;
-		marker.header.frame_id = "odom";
+		marker.header.frame_id = tf_odo_topic;
 		marker.header.stamp = ros::Time();
 		marker.ns = "NDT";
 		marker.id = i;
@@ -203,29 +227,6 @@ Eigen::Affine3d getAsAffine(float x, float y, float yaw ){
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Update measurement
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Globals
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-NDTMCL<pcl::PointXYZ> *ndtmcl;
-///Laser sensor offset
-float offx = 0;
-float offy = 0;
-float offa = 0;
-static bool has_sensor_offset_set = false;
-static bool isFirstLoad=true;
-Eigen::Affine3d Told,Todo;
-
-mrpt::utils::CTicTac	TT;
-std::string tf_odo_topic =   "odom";
-std::string tf_state_topic = "base_link";
-std::string tf_laser_link =  "base_laser_front_link";
-std::string tf_world =  "map";
-
-ros::Duration tf_timestamp_tolerance;
-double tf_tolerance;
-
-ros::Publisher mcl_pub; ///< The output of MCL is published with this!
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -434,9 +435,7 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 	///Calculate the differential motion from the last frame
 	Eigen::Affine3d Tmotion = Told.inverse() * T;
 	Todo = Todo*Tmotion; ///< just integrates odometry for the visualization
-	fprintf(stderr,"ROS SUCKS: %f, %f, %f\n", x, y, yaw);
-        fprintf(stderr,"ROS SUCKS 2: %f, %f, %f\n", T(0,0), T(1,1), T(2,2));
-        fprintf(stderr,"ROS SUCKS 3: %f, %f, %f\n", Told(0,0), Told(1,1), Told(2,2));
+
 	if(isFirstLoad==false){
 		if( (Tmotion.translation().norm()<0.005 && fabs(Tmotion.rotation().eulerAngles(0,1,2)[2])<(0.2*M_PI/180.0))){
 			Eigen::Vector3d dm = ndtmcl->getMean();
