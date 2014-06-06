@@ -15,6 +15,6 @@
 
   <!-- AMCL -->
 	<!--<include file="$(find mir_2dnav)/ros/launch/amcl.launch" />-->
-	<include file="$(find mir_2dnav)/ros/launch/ndt_mcl.launch" />
+	<include file="$(find ndt_mcl)/launch/ndt_mcl.launch" />
 	
 </launch>

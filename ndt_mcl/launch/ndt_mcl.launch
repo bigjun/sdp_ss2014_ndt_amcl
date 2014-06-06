@@ -1,14 +1,16 @@
 <?xml version="1.0"?>
 <launch>
-	<node pkg="ndt_mcl" type="2d_ndt_mcl_node" required="true" name="NDTMCL">		
+	<node pkg="ndt_mcl" type="2d_ndt_mcl_node" required="true" name="NDTMCL" output="screen">		
 		<param name="input_laser_topic" value="scan_front" />
 		<param name="tf_base_link" value="base_footprint" />
 		<param name="tf_laser_link" value="base_laser_front_link" />
+		<param name="tf_odom" value="odom" />
+		<param name="tf_world" value="map" />
 
 		<param name="use_pose_offset" value="true" />
 		<param name="sensor_pose_x" value="0.3" />
 		<param name="sensor_pose_y" value="0.0" />
-		<param name="sensor_pose_th" value="0.0" />
+		<param name="sensor_pose_th" value="-0.03" />
 
 		<param name="load_map_from_file" value="true" />
 		<param name="map_file_name" value="$(find mcr_default_env_config)/brsu-c025/brsu-c025_map.jff" />
@@ -19,6 +21,6 @@
 		<param name="initial_pose_yaw" value="0.0" />
 
 		<param name="save_output_map" value="false" />
-		<param name="map_resolution" value="0.02" />
+		<param name="map_resolution" value="0.3" />
 	</node>
 </launch>

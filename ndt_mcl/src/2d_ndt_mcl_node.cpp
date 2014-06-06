@@ -216,6 +216,27 @@ static bool has_sensor_offset_set = false;
 static bool isFirstLoad=true;
 Eigen::Affine3d Told,Todo;
 
+
+std::string tf_world;
+std::string tf_state_topic = "base_link";
+std::string tf_odom;
+bool isMapInit = false;
+
+bool initMap(ros::Time ts)
+{
+    static tf::TransformBroadcaster br;
+    tf::Transform transform;
+	tf::Quaternion q;
+	q.setRPY(0,0,ipos_yaw);
+    transform.setOrigin( tf::Vector3(ipos_x,ipos_y, 0.0) );
+  
+	transform.setRotation( q );
+    std::cout << "sending tranform from " << tf_world << " to " << tf_odom << std::endl;
+    br.sendTransform(tf::StampedTransform(transform, ts, tf_world, tf_odom)); // used to be world
+    isMapInit=true;
+    return true;
+}
+
 ros::Publisher mcl_pub; ///< The output of MCL is published with this!
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -227,7 +248,7 @@ bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
 	static int seq = 0;
 	O.header.stamp = ts;
 	O.header.seq = seq;
-	O.header.frame_id = "/odom";
+	O.header.frame_id = tf_world; //used to be /world
 	O.child_frame_id = "/mcl_pose";
 	
 	O.pose.pose.position.x = mean[0];
@@ -298,7 +319,9 @@ bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
   transform.setOrigin( tf::Vector3(mean[0],mean[1], 0.0) );
   
 	transform.setRotation( q );
-  br.sendTransform(tf::StampedTransform(transform, ts, "odom", "mcl_pose"));
+    std::cout << "sending tranform from " << tf_world << " to " << tf_state_topic << std::endl;
+  br.sendTransform(tf::StampedTransform(transform, ts, tf_world, tf_state_topic)); // used to be world
+  br.sendTransform(tf::StampedTransform(transform, ts, tf_world, "mcl_pose")); // used to be world
 	
 	return true;
 }
@@ -311,15 +334,24 @@ bool sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts){
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 mrpt::utils::CTicTac	TT;
 
-std::string tf_odo_topic =   "odom";
-std::string tf_state_topic = "base_link";
-std::string tf_laser_link =  "base_laser_front_link";
+std::string tf_odo_topic =   "odom"; // used to be odom_base_link
+std::string tf_laser_link =  "base_laser_front_link"; // used to be base_laser_link
 
 /**
  * Callback for laser scan messages 
  */
 void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 {
+    if (!isMapInit)
+    {
+    //    while (ros::ok())
+   //     {
+   //         ros::Rate r(100);
+            initMap(scan->header.stamp);
+   //         r.sleep();            
+   //     }
+        return;
+    }
 	static int counter = 0;
 	counter++;
 	
@@ -330,31 +362,35 @@ void callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 	
 	if(has_sensor_offset_set == false) return;
 	double gx,gy,gyaw,x,y,yaw;
+
+
 	
 	///Get state information
 	tf::StampedTransform transform;
-	tf_listener.waitForTransform("odom", tf_state_topic, scan->header.stamp,ros::Duration(1.0));
+	tf_listener.waitForTransform(tf_world, tf_state_topic, scan->header.stamp,ros::Duration(1.0)); // used to be world
 	///Ground truth --- Not generally available so should be changed to the manual initialization
 	try{
-		tf_listener.lookupTransform("odom", tf_state_topic, scan->header.stamp, transform);
+		tf_listener.lookupTransform(tf_world, tf_state_topic, scan->header.stamp, transform); // used to be world
 		gyaw = tf::getYaw(transform.getRotation());  
 	  gx = transform.getOrigin().x();
 	  gy = transform.getOrigin().y();
 	}
 	catch (tf::TransformException ex){
 		ROS_ERROR("%s",ex.what());
+        initMap(scan->header.stamp);
 		return;
 	}
 	
 	///Odometry 
 	try{
-		tf_listener.lookupTransform("odom", tf_odo_topic, scan->header.stamp, transform);
+		tf_listener.lookupTransform(tf_world, tf_odom, scan->header.stamp, transform); // used to be world
 		yaw = tf::getYaw(transform.getRotation());  
 	  x = transform.getOrigin().x();
 	  y = transform.getOrigin().y();
 	}
 	catch (tf::TransformException ex){
 		ROS_ERROR("%s",ex.what());
+        initMap(scan->header.stamp);
 		return;
 	}
 	
@@ -490,7 +526,7 @@ int main(int argc, char **argv){
 	ros::NodeHandle paramHandle ("~");
 	TT.Tic();
 	
-	std::string tf_base_link,input_laser_topic; 
+	std::string input_laser_topic; 
 	
 	//////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////
@@ -512,6 +548,8 @@ int main(int argc, char **argv){
 	paramHandle.param<std::string>("input_laser_topic", input_laser_topic, std::string("/base_scan"));
 	paramHandle.param<std::string>("tf_base_link", tf_state_topic, std::string("/base_link"));
 	paramHandle.param<std::string>("tf_laser_link", tf_laser_link, std::string("/hokuyo1_link"));
+	paramHandle.param<std::string>("tf_odom", tf_odom, std::string("odom"));
+	paramHandle.param<std::string>("tf_world", tf_world, std::string("map"));
 	
 	bool use_sensor_pose;
 	paramHandle.param<bool>("use_sensor_pose", use_sensor_pose, false);
@@ -536,6 +574,8 @@ int main(int argc, char **argv){
 	paramHandle.param<double>("initial_pose_yaw", ipos_yaw, 0.);
 	
 	if(userInitialPose==true) hasNewInitialPose=true;
+    initMap(ros::Time::now());
+    isMapInit = false;
 	
 	//////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////
