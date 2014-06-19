@@ -19,6 +19,8 @@
 \usepackage[hyphens]{url}
 \usepackage[hidelinks]{hyperref}
 
+\setlength{\parskip}{0.2cm}
+
 \lhead{NDT MCL ROS Node Documentation}
 \chead{}
 \rhead{}
@@ -54,7 +56,7 @@
 \setcounter{page}{2}
 
 \newpage
-	\setlength{\parindent}{0.5in}
+	\setlength{\parindent}{0.0in}
 
 	\tableofcontents
 
@@ -66,11 +68,46 @@
 	\section{NDT MCL - A Short Introduction}
 	\label{sec:ndtMclIntroduction}
 
+	Normal distribution transform Monte Carlo localisation (NDT-MCL), described in [1], is a localisation algorithm whose goal is providing a close and consistent estimate to the true position of a robot in a given environment. NDT-MCL uses a discretised, grid-based, representation of an environment. Unlike other localisation algorithms, which use occupancy grids to represent a map, NDT-MCL parameterises grid cells by Gaussian distributions, employing a so-called NDT representation as suggested by [2].
+
+	Given that the algorithm is an instance of the Monte Carlo family, the localisation steps remain the same as in grid-based localisation: calculating pose likelihood, updating particle weights, and resampling particles. The only difference in NDT-MCL is the likelihood calculation, such that $L2$-likelihood is used to express the discrepancy between the estimated and the actual robot pose.
+
 	\section{Node Description}
 	\label{sec:nodeDescription}
 
+	
+
 	\section{Usage}
 	\label{sec:usage}
+
+	Using the improved NDT-MCL node requires a launch file. Some of the launch file parameters were already present in the original implementation of the node, but some were added additionally. For completeness, the following table lists all parameters that can be set through the launch file, a short description of them, and their default values:
+	\begin{table}[H]
+		\caption{Parameters used by the NDT-MCL node}
+		\centering
+		\begin{tabular}{|p{4cm}|p{7.2cm}|p{4cm}|}
+			\hline
+			{\bf Parameter name} & {\bf Description} & {\bf Default value} \\\hline
+			{\it input\_laser\_topic} & Name of the topic where laser scans are published & {\it /base\_scan} \\\hline
+			{\it tf\_base\_link} & Name of a robot's base link frame & {\it /base\_link} \\\hline
+			{\it tf\_laser\_link} & Name of a laser frame; the frame should be expressed in terms of the base link frame & {\it /hokuyo1\_link} \\\hline
+			{\it tf\_odom} & Name of the robot's odometry frame & {\it odom} \\\hline
+			{\it tf\_world} & Name of the localisation frame & {\it map} \\\hline
+			{\it tf\_timestamp\_tolerance} & A number describing a discrepancy between the times when a transform is published and requested & {\it 1.0} \\\hline
+			{\it sensor\_pose\_x} & X coordinate of a laser with respect to the base frame & {\it 0.0} \\\hline
+			{\it sensor\_pose\_y} & Y coordinate of a laser with respect to the base frame & {\it 0.0} \\\hline
+			{\it sensor\_pose\_th} & Rotation angle of a laser with respect to the base frame & {\it 0.0} \\\hline
+			{\it load\_map\_from\_file} & A boolean value indicating whether to load an environment map from a file & {\it false} \\\hline
+			{\it map\_file\_name} & Name of a .jff file containing an NDT map; used if {\it load\_map\_from\_file} is set to {\it true} & {\it basement.ndmap} \\\hline
+			{\it forceSIR} & A boolean value indicating whether to resample particles at each iteration & {\it false} \\\hline
+			{\it set\_initial\_pose} & Indicates whether an initial pose is available and should be assigned & {\it true} \\\hline
+			{\it initial\_pose\_x} & X coordinate of an initial pose & {\it 0.0} \\\hline
+			{\it initial\_pose\_y} & Y coordinate of an initial pose & {\it 0.0} \\\hline
+			{\it initial\_pose\_yaw} & Rotation angle of an initial pose & {\it 0.0} \\\hline
+			{\it map\_resolution} & Resolution of the map in which a robot is going to be localised & {\it 0.2} \\\hline
+		\end{tabular}
+	\end{table}
+
+	In order to work with a complete navigation system, the navigation of the robot should be adapted to the NDT representation used by an environment's map.
 
 	\section{Potential Improvements}
 	\label{sec:potentialImprovements}
@@ -82,18 +119,15 @@
 	\label{sec:references}
 
 	\setlength{\parindent}{0.0in}
+	\setlength{\parskip}{0.25in}
 
 	[1] J. Saarinen, H. Andreasson, T. Stoyanov, and A. J. Lilienthal, "Normal Distributions Transform Monte-Carlo Localization (NDT-MCL)," in {\it Intelligent Robots and Systems (IROS), 2013 IEEE/RSJ International Conference on}, Tokyo, Japan, 2013, pp. 382-389.
-	\newline
 
 	[2] P. Biber, "The Normal Distributions Transform: A New Approach to Laser Scan Matching," in {\it Intelligent Robots and Systems, 2003. (IROS 2003). Proceedings. 2003 IEEE/RSJ International Conference on}, Las Vegas, NV, 2003, pp. 2743-2748.
-	\newline
 
 	[3] T. Stoyanov. (2013). {\it Using NDT Fuser to create an NDT map} [Online]. Available: \url{http://wiki.ros.org/perception_oru/Tutorials/Using%20NDT%20Fuser%20to%20create%20an%20NDT%20map}
-	\newline
 
 	[4] T. Stoyanov. (2013). {\it Running NDT-MCL examples} [Online]. Available: \url{http://wiki.ros.org/perception_oru/Tutorials/Running%20NDT-MCL%20examples}
-	\newline
 
 	[5] T. Stoyanov. (2013). {\it NDM MCL source code} [Online]. Available: \url{https://github.com/tstoyanov/perception_oru-release/tree/release/hydro/ndt_mcl}
 
