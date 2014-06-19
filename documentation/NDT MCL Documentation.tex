@@ -16,8 +16,18 @@
 \usepackage{graphicx}
 \usepackage{float}
 
+%used for code listings
+\usepackage[procnames]{listings}
+\usepackage{color}
+
 \usepackage[hyphens]{url}
 \usepackage[hidelinks]{hyperref}
+
+\usepackage{longtable}
+
+%used for adding dots to the table of contents
+\usepackage{tocloft}
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
 
 \setlength{\parskip}{0.2cm}
 
@@ -39,6 +49,12 @@
 \renewcommand{\UrlFont}{\normalsize}
 
 \begin{document}
+	\definecolor{keywords}{RGB}{0,0,255}
+	\definecolor{comments}{RGB}{0,100,0}
+	\definecolor{purple}{RGB}{100,0,200}
+	\definecolor{black}{RGB}{0,0,0}
+	\definecolor{gray}{RGB}{230,230,230}
+
 	\begin{titlepage}
 		\vspace*{\fill}
 		\begin{center}
@@ -48,6 +64,8 @@
 				Santosh Thoduka and Aleksandar Mitrevski
 				\linebreak
 				Bonn-Rhein-Sieg University of Applied Science
+				\linebreak \linebreak
+				June 19, 2014
 			\end{spacing}
 		\end{center}
 		\vspace*{\fill}
@@ -58,6 +76,8 @@
 \newpage
 	\setlength{\parindent}{0.0in}
 
+	%we center the table of contents title
+	\renewcommand*\contentsname{\hfill Contents \hfill}
 	\tableofcontents
 
 \newpage
@@ -65,34 +85,79 @@
 	\section{Introduction}
 	\label{sec:introduction}
 
+	The NDT-MCL (Normal distribution transform Monte Carlo localisation) ROS node is an implementation of the NDT-MCL algorithm for localisation against an NDT map. This document makes an attempt at introducing the node, including implementation and usage details, in a manner that improves the presentation provided by [4]. In order to do that, the rest of the document includes a brief introduction to NDT-MCL in section \ref{sec:ndtMclIntroduction}, a description of the node in section \ref{sec:nodeDescription}, our modifications in section \ref{sec:implementedModifications}, some usage details in section \ref{sec:usage}, as well as suggestions for potential improvements and modifications in section \ref{sec:potentialImprovements}.
+
+	\section{Target Audience}
+	\label{sec:targetAudience}
+
+	This document intends to provide an overview of the NDT-MCL ROS node, focusing not only on its usage, but also on certain internal implementation details. As a result, it might be useful for developers who need to work with, modify, or maintain the node, but also for developers who are developing similar nodes and need an orientation about the complexity of such a development effort.
+
+	Ideally, the document will be updated as the node is modified and improved. Its ultimate goal is being a constantly updated development documentation where developers can find all the necessary details regarding the NDT-MCL node.
+
 	\section{NDT MCL - A Short Introduction}
 	\label{sec:ndtMclIntroduction}
 
-	Normal distribution transform Monte Carlo localisation (NDT-MCL), described in [1], is a localisation algorithm whose goal is providing a close and consistent estimate to the true position of a robot in a given environment. NDT-MCL uses a discretised, grid-based, representation of an environment. Unlike other localisation algorithms, which use occupancy grids to represent a map, NDT-MCL parameterises grid cells by Gaussian distributions, employing a so-called NDT representation as suggested by [2].
+	Normal distribution transform Monte Carlo localisation (NDT-MCL), described in [1], is a localisation algorithm whose goal is providing a close and consistent estimate to the true position of a robot in a given environment. NDT-MCL uses a discretised, grid-based, representation of an environment; however, unlike other localisation algorithms, which use occupancy grids to represent a map, NDT-MCL parameterises grid cells by Gaussian distributions, employing a so-called NDT representation as suggested by [2].
 
-	Given that the algorithm is an instance of the Monte Carlo family, the localisation steps remain the same as in grid-based localisation: calculating pose likelihood, updating particle weights, and resampling particles. The only difference in NDT-MCL is the likelihood calculation, such that $L2$-likelihood is used to express the discrepancy between the estimated and the actual robot pose.
+	Given that the algorithm is an instance of the Monte Carlo family, the localisation steps remain the same as in grid-based localisation: calculating a pose likelihood, updating particle weights, and resampling particles. The only difference in NDT-MCL is the likelihood calculation, such that $L2$-likelihood is used to express the discrepancy between the estimated and the actual robot pose.
 
 	\section{Node Description}
 	\label{sec:nodeDescription}
 
-	
+	The main activity of the NDT-MCL node consists of processing laser scans in a callback function, called due to the node's subscription to a laser scan topic, and updating the estimated pose of a robot based on the scans and the robot's motion. A UML diagram of the node and some background code that implements a particle filter is shown in the figure below:
+	\begin{figure}[H]
+		\center
+		\includegraphics[width=160mm]{ndtmcl.png}
+		\caption{UML diagram of the NDT-MCL node and its dependencies}
+		\label{fig:umlDiagram}
+	\end{figure}
+
+	\section{Implemented Modifications}
+	\label{sec:implementedModifications}
+
+	The following list of modifications represents our contribution to the node's code:
+
+	\begin{itemize}
+		\item As can be seen in figure \ref{fig:umlDiagram}, the node is implemented as a class; this represents a modification of the initial code, which was an unstructured collection of functions and global variables.
+		\item The initial implementation of the node was using a ground truth estimate of the robot's position and the localisation pose estimate was published with respect to the ground truth. The modified version of the node uses the same principle as [6], such that the published pose estimate represents a transform between the localisation frame and a robot's odometry frame.
+		\item Some parameters were added to the launch file used for initialising the node; more details about these parameters are given in the following section.
+	\end{itemize}
 
 	\section{Usage}
 	\label{sec:usage}
 
-	Using the improved NDT-MCL node requires a launch file. Some of the launch file parameters were already present in the original implementation of the node, but some were added additionally. For completeness, the following table lists all parameters that can be set through the launch file, a short description of them, and their default values:
-	\begin{table}[H]
-		\caption{Parameters used by the NDT-MCL node}
-		\centering
-		\begin{tabular}{|p{4cm}|p{7.2cm}|p{4cm}|}
-			\hline
+	Using the improved NDT-MCL node requires:
+	\begin{itemize}
+		\item An NDT map of the environment where a robot should be localised; such a map can be developed using the NDT Fuser ROS node. An explanation of NDT Fuser is beyond the scope of this document, but a sufficiently good explanation of the map creation process is given in [3].
+		\item A launch file that will start the localisation node.
+	\end{itemize}
+	An example launch file used for initialising the NDT-MCL node is given below; some of these parameters were also used while working with our robot:
+	\lstset{basicstyle=\ttfamily\footnotesize, 
+	        keywordstyle=\color{keywords},
+	        commentstyle=\color{comments},
+		  backgroundcolor=\color{gray},
+		  frame = lines,
+	        stringstyle=\color{purple},
+	        showstringspaces=false,
+	        identifierstyle=\color{black},
+	        procnamekeys={def class},
+		 caption={A launch file for initialising NDT-MCL}}
+	\lstinputlisting{ndtmcl.xml}
+	Some of the parameters in the launch file were already present in the original implementation of the node, while others were added additionally in order to increase the node's customisation. For completeness, the following table lists all parameters that can be set through the launch file, a short description of them, and their default values. The parameters that have a * next to their name are those that were included additionally:
+	%\begin{table}[H]
+	%	\caption{Parameters used by the NDT-MCL node}
+	%	\centering
+		\begin{longtable}{| p{4.7cm} | p{7.2cm} | p{3.3cm} |}
+			\caption{Parameters used by the NDT-MCL node} \\\hline
 			{\bf Parameter name} & {\bf Description} & {\bf Default value} \\\hline
 			{\it input\_laser\_topic} & Name of the topic where laser scans are published & {\it /base\_scan} \\\hline
 			{\it tf\_base\_link} & Name of a robot's base link frame & {\it /base\_link} \\\hline
 			{\it tf\_laser\_link} & Name of a laser frame; the frame should be expressed in terms of the base link frame & {\it /hokuyo1\_link} \\\hline
-			{\it tf\_odom} & Name of the robot's odometry frame & {\it odom} \\\hline
-			{\it tf\_world} & Name of the localisation frame & {\it map} \\\hline
-			{\it tf\_timestamp\_tolerance} & A number describing a discrepancy between the times when a transform is published and requested & {\it 1.0} \\\hline
+			{\it tf\_odom*} & Name of the robot's odometry frame & {\it odom} \\\hline
+			{\it tf\_world*} & Name of the localisation frame & {\it map} \\\hline
+			{\it tf\_timestamp\_tolerance*} & A number describing a discrepancy between the times when a transform is published and requested & {\it 1.0} \\\hline
+			{\it translation\_noise\_tolerance*} & Translation noise tolerance (in meters) used for deciding whether a robot has really moved & 0.01 \\\hline
+			{\it rotation\_noise\_tolerance*} & Rotation noise tolerance (angle in degrees) used for deciding whether a robot has really rotated & 0.5 \\\hline
 			{\it sensor\_pose\_x} & X coordinate of a laser with respect to the base frame & {\it 0.0} \\\hline
 			{\it sensor\_pose\_y} & Y coordinate of a laser with respect to the base frame & {\it 0.0} \\\hline
 			{\it sensor\_pose\_th} & Rotation angle of a laser with respect to the base frame & {\it 0.0} \\\hline
@@ -104,8 +169,8 @@
 			{\it initial\_pose\_y} & Y coordinate of an initial pose & {\it 0.0} \\\hline
 			{\it initial\_pose\_yaw} & Rotation angle of an initial pose & {\it 0.0} \\\hline
 			{\it map\_resolution} & Resolution of the map in which a robot is going to be localised & {\it 0.2} \\\hline
-		\end{tabular}
-	\end{table}
+		\end{longtable}
+	%\end{table}
 
 	In order to work with a complete navigation system, the navigation of the robot should be adapted to the NDT representation used by an environment's map.
 
@@ -115,20 +180,25 @@
 	\section{Summary and Conclusions}
 	\label{sec:summaryAndConclusions}
 
+	The NDT-MCL (Normal distribution transform Monte Carlo localisation) ROS node is an implementation of the NDT-MCL algorithm for localisation against an NDT map. Being developed recently, the node has multiple potential areas of improvements: some of them were addressed during our four-week software development project, while others remain open.
+
+	We hope that this documentation will be a good starting point for developers who need to work with the node, helping them to use and improve NDT-MCL effectively.
+
 	\section{References}
 	\label{sec:references}
 
-	\setlength{\parindent}{0.0in}
-	\setlength{\parskip}{0.25in}
-
 	[1] J. Saarinen, H. Andreasson, T. Stoyanov, and A. J. Lilienthal, "Normal Distributions Transform Monte-Carlo Localization (NDT-MCL)," in {\it Intelligent Robots and Systems (IROS), 2013 IEEE/RSJ International Conference on}, Tokyo, Japan, 2013, pp. 382-389.
+
+	\setlength{\parskip}{0.25in}
 
 	[2] P. Biber, "The Normal Distributions Transform: A New Approach to Laser Scan Matching," in {\it Intelligent Robots and Systems, 2003. (IROS 2003). Proceedings. 2003 IEEE/RSJ International Conference on}, Las Vegas, NV, 2003, pp. 2743-2748.
 
 	[3] T. Stoyanov. (2013). {\it Using NDT Fuser to create an NDT map} [Online]. Available: \url{http://wiki.ros.org/perception_oru/Tutorials/Using%20NDT%20Fuser%20to%20create%20an%20NDT%20map}
 
-	[4] T. Stoyanov. (2013). {\it Running NDT-MCL examples} [Online]. Available: \url{http://wiki.ros.org/perception_oru/Tutorials/Running%20NDT-MCL%20examples}
+	[4] T. Stoyanov. (2014). {\it Running NDT-MCL examples} [Online]. Available: \url{http://wiki.ros.org/perception_oru/Tutorials/Running%20NDT-MCL%20examples}
 
-	[5] T. Stoyanov. (2013). {\it NDM MCL source code} [Online]. Available: \url{https://github.com/tstoyanov/perception_oru-release/tree/release/hydro/ndt_mcl}
+	[5] T. Stoyanov. (2014). {\it NDM MCL source code} [Online]. Available: \url{https://github.com/tstoyanov/perception_oru-release/tree/release/hydro/ndt_mcl}
+
+	[6] B. Gerkey. (2014). {\it AMCL source code} [Online]. Available: \url{https://github.com/ros-planning/navigation/blob/hydro-devel/amcl/src/amcl_node.cpp}
 
 \end{document}
