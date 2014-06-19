@@ -1,13 +1,17 @@
 <?xml version="1.0"?>
 <launch>
-        <!--<node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 map odom 100" />-->
+    <!--<node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 map odom 100" />-->
 	<node pkg="ndt_mcl" type="2d_ndt_mcl_node" required="true" name="NDTMCL">		
 		<param name="input_laser_topic" value="scan_front" />
 		<param name="tf_base_link" value="base_footprint" />
 		<param name="tf_laser_link" value="base_laser_front_link" />
-                <param name="tf_odom" value="odom" />
-                <param name="tf_world" value="map" />
-                <param name="tf_timestamp_tolerance" value="1.11" />
+        <param name="tf_odom" value="odom" />
+        <param name="tf_world" value="map" />
+        <param name="tf_timestamp_tolerance" value="1.1" />
+        <param name="translation_noise_tolerance" value="0.1" />
+
+        <!--angle in degrees-->
+        <param name="rotation_noise_tolerance" value="1.5" />
 
 		<param name="use_pose_offset" value="true" />
 		<param name="sensor_pose_x" value="0.3" />
