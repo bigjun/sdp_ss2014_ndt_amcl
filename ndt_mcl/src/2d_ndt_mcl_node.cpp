@@ -11,8 +11,10 @@
 * IEEE/RSJ International Conference on Intelligent Robots and Systems November 3-8, 2013, Tokyo Big Sight, Japan
 * 
 * @author Jari Saarinen (jari.p.saarinen@gmail.com)
+* @refactored Santosh Thoduka (santosh.thoduka@smail.inf.h-brs.de)
+* @refactored Aleksandar Mitrevski (aleksandar.mitrevski@smail.inf.h-brs.de)
 * 
-*	@TODO Initialization from GUI
+* @TODO Initialization from GUI
 * @TODO Global initialization possibility 
 * Known issues: in launch file (or hard coded parameters) you have to set the same resolution for NDT map as is saved -- otherwise it wont work
 */
@@ -106,6 +108,9 @@ private:
 
     ros::Duration tf_timestamp_tolerance;
     double tf_tolerance;
+
+    double translation_noise_tolerance;
+    double rotation_noise_tolerance;
 };
 
 bool NdtMclNode::hasSensorOffsetSet = false;
@@ -124,7 +129,7 @@ NdtMclNode::NdtMclNode():
         initializeScene();
     #endif
 
-	TT.Tic();
+	this->TT.Tic();
 
 	std::string input_laser_topic; 
 	this->paramHandle.param<std::string>("input_laser_topic", input_laser_topic, std::string("/base_scan"));
@@ -165,6 +170,10 @@ NdtMclNode::NdtMclNode():
 
     this->paramHandle.param<double>("tf_timestamp_tolerance", this->tf_tolerance, 1.0);
     tf_timestamp_tolerance.fromSec(tf_tolerance);
+
+    this->paramHandle.param<double>("translation_noise_tolerance", this->translation_noise_tolerance, 0.01);
+    this->paramHandle.param<double>("rotation_noise_tolerance", this->rotation_noise_tolerance, 0.5);
+    this->rotation_noise_tolerance = this->rotation_noise_tolerance * M_PI / 180.0;
 
 	if(this->userInitialPose == true)
         this->hasNewInitialPose = true;
@@ -216,7 +225,7 @@ void NdtMclNode::callback(const sensor_msgs::LaserScan::ConstPtr& scan)
     double looptime = this->TT.Tac();
     this->TT.Tic();
     fprintf(stderr,"Lt( %.1lfms %.1lfHz seq:%d) -",looptime*1000,1.0/looptime,scan->header.seq);
-    
+
     if(NdtMclNode::hasSensorOffsetSet == false)
         return;
     double gx,gy,gyaw,x,y,yaw;
@@ -292,9 +301,9 @@ void NdtMclNode::callback(const sensor_msgs::LaserScan::ConstPtr& scan)
     //Just integrates odometry for the visualization
     this->Todo = this->Todo * Tmotion;
 
-    if(NdtMclNode::isFirstLoad==false)
+    if(!NdtMclNode::isFirstLoad)
     {
-        if( (Tmotion.translation().norm()<0.005 && fabs(Tmotion.rotation().eulerAngles(0,1,2)[2])<(0.2*M_PI/180.0)))
+        if( (Tmotion.translation().norm() < this->translation_noise_tolerance && fabs(Tmotion.rotation().eulerAngles(0,1,2)[2]) < this->rotation_noise_tolerance))
         {
             Eigen::Vector3d dm = this->ndtmcl->getMean();
             Eigen::Matrix3d cov = this->ndtmcl->pf.getDistributionVariances();
@@ -335,9 +344,13 @@ void NdtMclNode::callback(const sensor_msgs::LaserScan::ConstPtr& scan)
     }
 
     // Now we have the sensor origin and pointcloud -- Lets do MCL
-    if( (Tmotion.translation().norm()>0.01 || fabs(Tmotion.rotation().eulerAngles(0,1,2)[2])>(0.5*M_PI/180.0)))
+    fprintf(stderr,"Norm %f \n",Tmotion.translation().norm());
+    fprintf(stderr,"Angle %f \n",fabs(Tmotion.rotation().eulerAngles(0,1,2)[2]));
+    if( (Tmotion.translation().norm() > this->translation_noise_tolerance || fabs(Tmotion.rotation().eulerAngles(0,1,2)[2]) > this->rotation_noise_tolerance))
+    {
         //predicts, updates and resamples if necessary (ndt_mcl.hpp)
         this->ndtmcl->updateAndPredict(Tmotion, *cloud);
+    }
 
     //Maximum aposteriori pose
     Eigen::Vector3d dm = this->ndtmcl->getMean();
@@ -367,7 +380,7 @@ void NdtMclNode::callback(const sensor_msgs::LaserScan::ConstPtr& scan)
 
         scene->clear();
         scene->insert(plane);
-        
+
         addMap2Scene(ndtmcl->map, origin, scene);
         addPoseCovariance(dm[0],dm[1],cov,scene);
         addScanToScene(scene, origin, cloud);
@@ -423,24 +436,23 @@ void NdtMclNode::sendMapToRviz(lslgeneric::NDTMap<pcl::PointXYZ> &map)
         marker.pose.orientation.y = q.y();
         marker.pose.orientation.z = q.z();
         marker.pose.orientation.w = q.w();
-        
+
         marker.scale.x = 100.0*evals(0);
         marker.scale.y = 100.0*evals(1);
         marker.scale.z = 100.0*evals(2);
-        
+
         marker.color.a = 1.0;
         marker.color.r = 0.0;
         marker.color.g = 1.0;
         marker.color.b = 0.0;
-        
+
         marray.markers.push_back(marker);
     }
     
     this->ndtmap_pub.publish(marray);
     
-    for(unsigned int i=0;i<ndts.size();i++){
+    for(unsigned int i=0;i<ndts.size();i++)
         delete ndts[i];
-    }
 }
 
 bool NdtMclNode::sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros::Time ts)
@@ -467,7 +479,7 @@ bool NdtMclNode::sendROSOdoMessage(Eigen::Vector3d mean,Eigen::Matrix3d cov, ros
         }
 
         tf::Transform latest_tf_ = tf::Transform(tf::Quaternion(odom_to_map.getRotation()), tf::Point(odom_to_map.getOrigin()));
-        tf::StampedTransform tmp_tf_stamped(latest_tf_.inverse(), ts, tf_world, this->tf_odo);
+        tf::StampedTransform tmp_tf_stamped(latest_tf_.inverse(), ts, this->tf_world, this->tf_odo);
 
         //*****************************************************
         // Creates a pose message and publishes the transforms
@@ -559,8 +571,8 @@ void NdtMclNode::initialPoseReceived(const geometry_msgs::PoseWithCovarianceStam
     ipose.getBasis().getEulerYPR(this->ipos_yaw, pitch, roll);
 
     this->ivar_x = msg->pose.covariance[0];
-    this->ivar_x = msg->pose.covariance[6];
-    this->ivar_x = msg->pose.covariance[35];
+    this->ivar_y = msg->pose.covariance[6];
+    this->ivar_yaw = msg->pose.covariance[35];
 
     this->hasNewInitialPose = true;
 }
@@ -582,10 +594,10 @@ Eigen::Affine3d NdtMclNode::getAsAffine(float x, float y, float yaw)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
-	ros::init(argc, argv, "NDT-MCL");
+    ros::init(argc, argv, "NDT-MCL");
 
     NdtMclNode ndtMcl;
-	ros::spin();
-	
-	return 0;
+    ros::spin();
+
+    return 0;
 }
