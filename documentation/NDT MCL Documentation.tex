@@ -85,7 +85,7 @@
 	\section{Introduction}
 	\label{sec:introduction}
 
-	The NDT-MCL (Normal distribution transform Monte Carlo localisation) ROS node is an implementation of the NDT-MCL algorithm for localisation against an NDT map. This document makes an attempt at introducing the node, including implementation and usage details, in a manner that improves the presentation provided by [4]. In order to do that, the rest of the document includes a brief introduction to NDT-MCL in section \ref{sec:ndtMclIntroduction}, a description of the node in section \ref{sec:nodeDescription}, our modifications in section \ref{sec:implementedModifications}, some usage details in section \ref{sec:usage}, as well as suggestions for potential improvements and modifications in section \ref{sec:potentialImprovements}.
+	The NDT-MCL (Normal distribution transform Monte Carlo localisation) ROS node is an implementation of the NDT-MCL algorithm for localisation against an NDT map. This document makes an attempt at introducing the node, including implementation and usage details, in a manner that improves the presentation provided by [4]. In order to do that, the rest of the document includes a brief introduction to NDT-MCL in section \ref{sec:ndtMclIntroduction}, a description of the node in section \ref{sec:nodeDescription}, our modifications in section \ref{sec:implementedModifications}, some usage details in section \ref{sec:usage}, remaining issues in section \ref{sec:remainingIssues}, as well as suggestions for potential improvements and modifications in section \ref{sec:potentialImprovements}.
 
 	\section{Target Audience}
 	\label{sec:targetAudience}
@@ -168,14 +168,43 @@
 			{\it initial\_pose\_x} & X coordinate of an initial pose & {\it 0.0} \\\hline
 			{\it initial\_pose\_y} & Y coordinate of an initial pose & {\it 0.0} \\\hline
 			{\it initial\_pose\_yaw} & Rotation angle of an initial pose & {\it 0.0} \\\hline
-			{\it map\_resolution} & Resolution of the map in which a robot is going to be localised & {\it 0.2} \\\hline
+			{\it map\_resolution} & Resolution of the map (in meters) in which a robot is going to be localised & {\it 0.2} \\\hline
 		\end{longtable}
 	%\end{table}
 
 	In order to work with a complete navigation system, the navigation of the robot should be adapted to the NDT representation used by an environment's map.
-
-	\section{Potential Improvements}
+	
+	\section{Remaining Issues}
+	\label{sec:remainingIssues}
+	
+	The following are some of the issues that remain unsolved in our testing of NDT Fuser and NDT-MCL nodes:
+	\begin{itemize}
+		\item \textbf{Poor localisation during mapping using the NDT Fuser node}\\
+		The localisation errors seem to get large when the robot is rotated. If pure translation is used while mapping, localisation is relatively good. This occurs both in simulation and in a real environment. The cause for this has not been investigated.
+		\item \textbf{Incorrect pose estimation while robot is stationary}\\
+		On some runs, if the robot moves around the environment and then stops, the estimated pose of the robot continues moving. Since it does not happen on every run, it is suspected this has to do with the noise related to the motion model and the translational and rotational noise tolerance. Currently, this is the most pressing issue.
+		\item \textbf{Pose estimate ``jumps''}\\
+		On one run, the pose estimate of the robot ``jumped'' back to the initial position of the robot after it had moved roughly 5 meters away from the initial position. This behaviour was not reproducible on subsequent runs.
+		\item \textbf{Incorrect visualization of odometry}\\
+		Although it is irrelevant to the functionality of the algorithm, it was noted that the odometry on MRPT visualizer is offset from the actual position of the robot by a fixed amount.	
+	\end{itemize}  
+	As mentioned in section \ref{sec:potentialImprovements}, adding more configuration parameters could narrow down the cause of the issues and allow faster testing.
+	
+	\section{Potential Improvements and Future Work}
 	\label{sec:potentialImprovements}
+	
+	In addition to investigating and fixing the issues mentioned in section \ref{sec:remainingIssues} there are a number of improvements to the that would make testing and implementation on different platforms easier. Once the issues and improvements have been sorted out, using the NDT-based map for navigation would be the next step. 
+	
+	\begin{itemize}		
+		\item \textbf{Better customizability}\\
+		Additional configuration constants such as motion model parameters, particle filter parameters and laser model parameters can be exposed to the user through the launch file. This will allow the user to customize the node to better fit their platform and environment without modifications to the code.
+		\item \textbf{Determination of map resolution from file}\\
+		Currently, the map resolution needs to be specified in the launch file for both the NDT Fuser and NDT-MCL nodes and they need to match in order for the map to be usable by the NDT-MCL node. Mismatched resolutions can be avoided if the resolution of the map is encoded in the map file (.jff) itself and can be read in by the node using the map. This would require changes to the ndt\_map package.
+		\item \textbf{Port visualization to rviz}\\
+		The possibility of visualizing the map, particles, estimated pose and odometry in rviz should be investigated. Rviz is a 3D visualization tool for ROS and is already being used for purposes such as sending navigation goals, viewing point clouds, cost maps etc. It would be useful to integrate the visualization for NDT-MCL into the same interface.
+		\item \textbf{Investigate compatibility with navigation planners}\\
+	Existing ROS navigation planners such as the dwa\_local\_planner and navfn use a 2D cost map which depends on OccupancyGrid based maps [7]. In order for the NDT-based map to be used on an autonomous system, planners need to be able to use it. Hence, the use of the NDT-map with existing cost maps and planners needs to be investigated or ones that exploit the unique representation of the map need to be developed.
+	\end{itemize}
 
 	\section{Summary and Conclusions}
 	\label{sec:summaryAndConclusions}
@@ -200,5 +229,7 @@
 	[5] T. Stoyanov. (2014). {\it NDM MCL source code} [Online]. Available: \url{https://github.com/tstoyanov/perception_oru-release/tree/release/hydro/ndt_mcl}
 
 	[6] B. Gerkey. (2014). {\it AMCL source code} [Online]. Available: \url{https://github.com/ros-planning/navigation/blob/hydro-devel/amcl/src/amcl_node.cpp}
+	
+	[7] E Marder-Eppstein. (2014). {\it costmap\_2d Package Summary} [Online]. Available: \url{http://wiki.ros.org/costmap_2d?distro=hydro}
 
 \end{document}
