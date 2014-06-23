@@ -84,6 +84,18 @@
 \usepackage{subcaption}
 \usepackage{float}
 
+
+\newenvironment{changemargin}[2]{% 
+  \begin{list}{}{% 
+    \setlength{\topsep}{0pt}% 
+    \setlength{\leftmargin}{#1}% 
+    \setlength{\rightmargin}{#2}% 
+    \setlength{\listparindent}{\parindent}% 
+    \setlength{\itemindent}{\parindent}% 
+    \setlength{\parsep}{\parskip}% 
+  }% 
+  \item[]}{\end{list}} 
+
 %----------------------------------------------------------------------------------------
 %	TITLE PAGE
 %----------------------------------------------------------------------------------------
@@ -123,9 +135,11 @@ Hochschule Bonn Rhein Sieg \\ % Your institution for the title page
 
 \begin{frame}
 \frametitle{Node Description}
+\begin{changemargin}{-1cm}{-1cm}
 	\begin{figure}
-    \includegraphics[height=0.7\textwidth]{ndtmcl.png}    
+    \includegraphics[height=0.74\textwidth]{ndtmcl.png}    
     \end{figure}
+\end{changemargin}
 \end{frame}
 
 \begin{frame}
